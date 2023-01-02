@@ -1,0 +1,125 @@
+{
+  "name": "file-rs",
+  "displayName": "File Rotater/Switcher",
+  "description": "Switcher current file to one with same name but different extension",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:file-rs.rotateNext",
+    "onCommand:file-rs.rotatePrevious"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "file-rs.rotateNext",
+        "title": "Opens next file in extension rotation"
+      },
+      {
+        "command": "file-rs.rotatePrevious",
+        "title": "Opens previous file in extension rotation"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "file-rs.rotateNext",
+        "key": "f2"
+      },      
+      {
+        "command": "file-rs.rotatePrevious",
+        "key": "shift+f2"
+      }
+    ],
+    "configuration": {
+      "title": "File Rotater/Switcher",
+      "type": "object",
+      "properties": {
+        "file-rs.extensionRotations": {
+          "type": "array",
+          "markdownDescription": "Array of rotations. Rotations contain steps. When rotating, next (or previous) step is chosen based on current file extension. A step is either a string (`'.cpp'`) or an array of strings (`['.c','.cpp']`).",
+          "default": [
+            [
+              [
+                ".h",
+                ".hh",
+                ".hpp",
+                ".hxx"
+              ],
+              [
+                ".c",
+                ".cc",
+                ".cpp",
+                ".cxx"
+              ]
+            ],
+            [
+              [
+                ".ts",
+                ".tsx",
+                ".js",
+                ".cs"
+              ],
+              [
+                ".css",
+                ".sass",
+                ".scss",
+                ".less"
+              ],
+              [
+                ".html",
+                ".vue",
+                ".cshtml"
+              ]
+            ]
+          ]
+        },
+        "file-rs.blacklistedFilePaths": {
+          "type": "array",
+          "description": "Paths of files that will be rejected if attempted to be rotated into. Root of the path (ie. drive letter on Windows) must be lowercase.",
+          "default": []
+        },
+        "file-rs.blacklistedDirectories": {
+          "type": "array",
+          "description": "Paths of directories that will be rejected if attempted to be rotated into. Root of the path (ie. drive letter on Windows) must be lowercase.",
+          "default": []
+        },
+        "file-rs.showMessages": {
+          "type": "boolean",
+          "description": "Show info/error messages when executing commands.",
+          "default": false
+        },
+        "file-rs.searchOtherDirectiories": {
+          "type": "boolean",
+          "description": "If unable to find corresponding file in current directory, try to search for it in other workspace directories.",
+          "default": true
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/glob": "^8.0.0",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "16.x",
+    "@typescript-eslint/eslint-plugin": "^5.45.0",
+    "@typescript-eslint/parser": "^5.45.0",
+    "eslint": "^8.28.0",
+    "glob": "^8.0.3",
+    "mocha": "^10.1.0",
+    "typescript": "^4.9.3",
+    "@vscode/test-electron": "^2.2.0"
+  }
+}
