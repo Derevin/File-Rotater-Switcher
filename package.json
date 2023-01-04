@@ -38,11 +38,11 @@
     "keybindings": [
       {
         "command": "file-rs.rotateNext",
-        "key": "f2"
+        "key": "f4"
       },      
       {
         "command": "file-rs.rotatePrevious",
-        "key": "shift+f2"
+        "key": "shift+f4"
       }
     ],
     "configuration": {
