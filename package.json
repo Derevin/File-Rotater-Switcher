@@ -28,11 +28,11 @@
     "commands": [
       {
         "command": "file-rs.rotateNext",
-        "title": "Opens next file in extension rotation"
+        "title": "Open next file in rotation"
       },
       {
         "command": "file-rs.rotatePrevious",
-        "title": "Opens previous file in extension rotation"
+        "title": "Open previous file in rotation"
       }
     ],
     "keybindings": [
