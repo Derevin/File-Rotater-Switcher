@@ -1,4 +1,3 @@
-import { validateHeaderName } from 'http';
 import * as vscode from 'vscode';
 
 
@@ -25,5 +24,9 @@ export namespace Config {
 
 	export function getSearchOtherDirectiories(): boolean {
 		return getConfig().get('searchOtherDirectiories') || false;
+	}
+
+	export function getAllowStepPassing(): boolean {
+		return getConfig().get('allowStepPassing') || false;
 	}
 }

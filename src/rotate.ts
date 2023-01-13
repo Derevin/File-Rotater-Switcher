@@ -98,30 +98,40 @@ enum Direction {
 	next, previous
 }
 
-async function getDesiredRotationStep(rotations: Array<Array<(string|Array<string>)>>, dir : Direction, currentExt : string) : Promise<(string|Array<string>|undefined)>{
+interface CurrentRotationInfo{
+	rotation : Array<(string|Array<string>)>;
+	stepIdx : number;
+}
+
+async function getCurrentRotationInfo(rotations: Array<Array<(string|Array<string>)>>, currentExt : string) : Promise<(CurrentRotationInfo|undefined)>{
 	for (let rotation of rotations){
 		for(let i in rotation){
 			const index : number = Number(i);
 			const step = rotation[index];
 			if ((typeof(step) === 'string' && step === currentExt) || (Array.isArray(step) && step.includes(currentExt))){
-				if (dir === Direction.next){
-					if (index ===  rotation.length - 1){ // last index
-						return rotation[0];
-					} else {
-						return rotation[index + 1];
-					}
-				} else { // previous
-					if (index === 0){
-						return rotation[rotation.length - 1];
-					} else {
-						return rotation[index - 1];
-					}
-				}
+				return {rotation: rotation, stepIdx: index};
 			} 
 		}
-	}
-	
+	}	
+
 	return undefined;
+}
+
+async function getDesiredRotationStep(currentRotationInfo: CurrentRotationInfo, dir : Direction, offset: number) : Promise<(string|Array<string>)>{
+	const {rotation, stepIdx} = currentRotationInfo;
+	if (dir === Direction.next){
+		if (stepIdx + offset >= rotation.length){ // last index
+			return rotation[stepIdx + offset - rotation.length];
+		} else {
+			return rotation[stepIdx + offset];
+		}
+	} else { // previous
+		if (stepIdx - offset <= 0){
+			return rotation[rotation.length - stepIdx - offset];
+		} else {
+			return rotation[stepIdx - offset];
+		}
+	}
 }
 
 async function rotate(dir : Direction) {
@@ -141,22 +151,30 @@ async function rotate(dir : Direction) {
 		return;
 	}
 
-	const desiredStep : (string|Array<string>|undefined) = await getDesiredRotationStep(rotations, dir, currentFileInfo.ext);
-	if (!desiredStep){
+	const currentRotationInfo = await getCurrentRotationInfo(rotations, currentFileInfo.ext);
+	if (!currentRotationInfo){
 		showError(`Undefined rotation for ${currentFileInfo.ext}`);
 		return;
 	}
+
+	for(let i = 1; i < currentRotationInfo.rotation.length; ++i){
+		const desiredStep : (string|Array<string>) = await getDesiredRotationStep(currentRotationInfo, dir, i);		
+		const desiredExtensions : Array<string> = typeof(desiredStep) === 'string' ? [desiredStep] : desiredStep;
+		const correspondingFilePath : (string|undefined) = await getCorresponding(desiredExtensions, currentFileInfo);
+		if (!correspondingFilePath){
+			if (Config.getAllowStepPassing()){
+				continue;
+			} else {
+				break;
+			}
+		}
 	
-	const desiredExtensions : Array<string> = typeof(desiredStep) === 'string' ? [desiredStep] : desiredStep;
-	const correspondingFilePath : (string|undefined) = await getCorresponding(desiredExtensions, currentFileInfo);
-	if (!correspondingFilePath){		
-		showWarning("No file to rotate to");
+		const uri = vscode.Uri.file(correspondingFilePath);
+		const document = await vscode.workspace.openTextDocument(uri);
+		await vscode.window.showTextDocument(document);
 		return;
 	}
-
-    const uri = vscode.Uri.file(correspondingFilePath);
-    const document = await vscode.workspace.openTextDocument(uri);
-    await vscode.window.showTextDocument(document);
+	showWarning("No file to rotate to");
 }
 
 export async function rotateNext(){
