@@ -2,7 +2,7 @@
   "name": "file-rs",
   "displayName": "File Rotater/Switcher",
   "description": "Extension for VSCode that allows quick rotating (switching) between affiliated files",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "publisher": "Derevin",
   "bugs": {
     "uri": "https://github.com/Derevin/File-Rotater-Switcher/issues"
@@ -13,6 +13,7 @@
     "type": "github"
   },
   "license": "MIT",
+	"icon": "static/file-rotater-icon.png",
   "engines": {
     "vscode": "^1.74.0"
   },
