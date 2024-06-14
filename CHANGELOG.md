@@ -1,5 +1,9 @@
 # Change Log
 
+## 1.1.0
+
+- Add commonPathSearch option, which tries to pick one file from multile files that could be rotated into, based on how much of path is shared 
+
 ## 1.0.2
 
 - Add an icon

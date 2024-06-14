@@ -55,6 +55,56 @@ async function getCorresponding(allowedExtension : Array<string>, currentFileInf
 		return foundFiles[0].path.substring(1);
 	}
 
+	if (Config.getCommonPathSearch()){ // Allowed to estimate corresponding file based on common dir in path
+		const commonLengths = foundFiles.map((fileUri) => {
+			function longestCommonPrefix(str1: string, str2: string): number {    
+				let commonPrefix = '';
+
+				// Find the length of the shorter string
+				const minLength = Math.min(str1.length, str2.length);
+			
+				// Iterate character by character
+				for (let i = 0; i < minLength; i++) {
+					if (str1[i] !== str2[i]) {
+						break;
+					}
+					commonPrefix += str1[i];
+				}
+			
+				return commonPrefix.length;
+			}
+			const fileInfo = path.parse(path.normalize(fileUri.path.substring(1)));
+			return longestCommonPrefix(fileInfo.dir, currentFileInfo.dir);
+		} );
+
+		function getIndexOfUniqueHighestNumber(arr: number[]): number | null {
+			if (arr.length === 0) {
+				return null; // Return null for an empty array
+			}
+		
+			let maxIndex = 0;
+			let maxNumber = arr[0];
+			let isUnique = true;
+		
+			for (let i = 1; i < arr.length; i++) {
+				if (arr[i] > maxNumber) {
+					maxNumber = arr[i];
+					maxIndex = i;
+					isUnique = true; // Reset the uniqueness flag
+				} else if (arr[i] === maxNumber) {
+					isUnique = false; // Found a duplicate of the max number
+				}
+			}
+		
+			return isUnique ? maxIndex : null;
+		}
+
+		const highestIdx = getIndexOfUniqueHighestNumber(commonLengths);
+		if (highestIdx !== null){
+			return foundFiles[highestIdx].path.substring(1);
+		}
+	}
+
 	const options = foundFiles.map((item) => {
 		return {
 			label: path.basename(item.path),

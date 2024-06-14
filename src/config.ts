@@ -29,4 +29,8 @@ export namespace Config {
 	export function getAllowStepPassing(): boolean {
 		return getConfig().get('allowStepPassing') || false;
 	}
+
+	export function getCommonPathSearch(): boolean {
+		return getConfig().get('commonPathSearch') || false;
+	}
 }

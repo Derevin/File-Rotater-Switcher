@@ -2,7 +2,7 @@
   "name": "file-rs",
   "displayName": "File Rotater/Switcher",
   "description": "Extension for quick rotating (switching) between affiliated files",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "publisher": "Derevin",
   "bugs": {
     "uri": "https://github.com/Derevin/File-Rotater-Switcher/issues"
@@ -112,6 +112,11 @@
         "file-rs.allowStepPassing": {
           "type": "boolean",
           "description": "If unable to find corresponding file in the next rotation step, attempt to search in the next step.",
+          "default": true
+        },
+        "file-rs.commonPathSearch": {
+          "type": "boolean",
+          "description": "If unable to find corresponding file in current, try to find the best fit based on how much of path is shared across the possibilities. Does nothing if searchOtherDirectiories is disabled.",
           "default": true
         }
       }
