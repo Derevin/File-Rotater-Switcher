@@ -57,12 +57,19 @@ async function getCorresponding(allowedExtension : Array<string>, currentFileInf
 
 	if (Config.getCommonPathSearch()){ // Allowed to estimate corresponding file based on common dir in path
 		const commonLengths = foundFiles.map((fileUri) => {
-			function longestCommonPrefix(str1: string, str2: string): number {    
-				let commonPrefix = '';
+			function longestCommonPrefix(str1: string, str2: string): number {
+				// skip possible extra slashes
+				while (str1.startsWith('\\') || str1.startsWith('/')){
+					str1 = str1.substring(1);
+				}
+				while (str2.startsWith('\\') || str2.startsWith('/')){
+					str2 = str2.substring(1);
+				}
 
 				// Find the length of the shorter string
 				const minLength = Math.min(str1.length, str2.length);
 			
+				let commonPrefix = '';
 				// Iterate character by character
 				for (let i = 0; i < minLength; i++) {
 					if (str1[i] !== str2[i]) {
