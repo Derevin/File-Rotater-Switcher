@@ -82,8 +82,67 @@ async function getCorresponding(allowedExtension : Array<string>, currentFileInf
 			}
 			const fileInfo = path.parse(path.normalize(fileUri.path.substring(1)));
 			return longestCommonPrefix(fileInfo.dir, currentFileInfo.dir);
-		} );
+		});
+	
+		function getIndicesOfHighestNumber(arr: number[]): number[] {
+			if (arr.length === 0) {
+				return []; // Return empty array for an empty input
+			}
+	
+			let maxNumber = arr[0];
+			let indices = [0];
+	
+			for (let i = 1; i < arr.length; i++) {
+				if (arr[i] > maxNumber) {
+					maxNumber = arr[i];
+					indices = [i];
+				} else if (arr[i] === maxNumber) {
+					indices.push(i);
+				}
+			}
+	
+			return indices;
+		}
+	
+		const highestIndices = getIndicesOfHighestNumber(commonLengths);
+	
+		if (highestIndices.length === 1){
+			const highestIdx = highestIndices[0];
+			return foundFiles[highestIdx].path.substring(1);
+		}
+		
+		// Multiple files have the same highest prefix length
+		// Now compute suffix lengths for these files
+		const suffixLengths = highestIndices.map((idx) => {
+			const fileUri = foundFiles[idx];
+			function longestCommonSuffix(str1: string, str2: string): number {
+				// skip possible extra slashes at the end
+				while (str1.endsWith('\\') || str1.endsWith('/')){
+					str1 = str1.slice(0, -1);
+				}
+				while (str2.endsWith('\\') || str2.endsWith('/')){
+					str2 = str2.slice(0, -1);
+				}
 
+				// Find the length of the shorter string
+				const minLength = Math.min(str1.length, str2.length);
+			
+				let commonSuffix = '';
+				// Iterate character by character from the end
+				for (let i = 1; i <= minLength; i++) {
+					if (str1[str1.length - i] !== str2[str2.length - i]) {
+						break;
+					}
+					commonSuffix = str1[str1.length - i] + commonSuffix;
+				}
+			
+				return commonSuffix.length;
+			}
+			const fileInfo = path.parse(path.normalize(fileUri.path.substring(1)));
+			return longestCommonSuffix(fileInfo.dir, currentFileInfo.dir);
+		});
+
+		// Function to get index of unique highest number
 		function getIndexOfUniqueHighestNumber(arr: number[]): number | null {
 			if (arr.length === 0) {
 				return null; // Return null for an empty array
@@ -106,9 +165,11 @@ async function getCorresponding(allowedExtension : Array<string>, currentFileInf
 			return isUnique ? maxIndex : null;
 		}
 
-		const highestIdx = getIndexOfUniqueHighestNumber(commonLengths);
-		if (highestIdx !== null){
-			return foundFiles[highestIdx].path.substring(1);
+		// Now find the index of the unique highest suffix length among these files
+		const indexOfMaxSuffixLength = getIndexOfUniqueHighestNumber(suffixLengths);
+		if (indexOfMaxSuffixLength !== null) {
+			const highestSuffixIdx = highestIndices[indexOfMaxSuffixLength];
+			return foundFiles[highestSuffixIdx].path.substring(1);
 		}
 	}
 

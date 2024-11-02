@@ -1,5 +1,9 @@
 # Change Log
 
+## 1.1.2
+
+- Extend commonPathSearch functionality to consider also suffixes, not only prefixes
+
 ## 1.1.1
 
 - Fix commonPathSearch option on Linux
