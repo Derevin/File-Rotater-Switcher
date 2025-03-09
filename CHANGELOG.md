@@ -1,5 +1,11 @@
 # Change Log
 
+## 1.2.0
+
+- Rotations now work on suffixes rather than file extensions, allowing greater customisability.
+- Add commonPathSearchTiebreakerFewestSteps option, which allows better guessing of desired file
+- Bugfix in commonPathSearch functionality
+
 ## 1.1.2
 
 - Extend commonPathSearch functionality to consider also suffixes, not only prefixes
