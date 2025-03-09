@@ -166,6 +166,26 @@ async function getCorresponding(allowedExtension : Array<string>, currentFileInf
 			const highestSuffixIdx = highestIndices[indexOfMaxSuffixLength];
 			return foundFiles[highestSuffixIdx].path.substring(1);
 		}
+
+		if (Config.getCommonPathSearchTiebreakerFewestSegments()){
+			// In case of a tiebreaker, pick the diretory with the fewest path segments
+			let finalCandidates: { idx: number; segmentCount: number }[] = [];
+			for (let idx of highestIndices) {
+				const fileUri = foundFiles[idx];
+				const fileInfo = path.parse(path.normalize(fileUri.path.substring(1)));
+				const dirSegments = fileInfo.dir.split(/[\\/]+/).filter(s => s.length > 0).length;
+				finalCandidates.push({ idx, segmentCount: dirSegments });
+			}
+		
+			const minSegments = Math.min(...finalCandidates.map(c => c.segmentCount));
+			const filtered = finalCandidates.filter(c => c.segmentCount === minSegments);
+		
+			if (filtered.length === 1) {
+				// Exactly one directory has the fewest segments
+				const chosen = filtered[0].idx;
+				return foundFiles[chosen].path.substring(1);
+			}
+		}
 	}
 
 	const options = foundFiles.map((item) => {

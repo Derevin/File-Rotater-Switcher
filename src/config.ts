@@ -33,4 +33,8 @@ export namespace Config {
 	export function getCommonPathSearch(): boolean {
 		return getConfig().get('commonPathSearch') || false;
 	}
+
+	export function getCommonPathSearchTiebreakerFewestSegments(): boolean {
+		return getConfig().get('commonPathSearchTiebreakerFewestSegments') || false;
+	}
 }
