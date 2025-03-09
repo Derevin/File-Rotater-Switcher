@@ -118,6 +118,11 @@
           "type": "boolean",
           "description": "If unable to find corresponding file in current, try to find the best fit based on how much of path is shared across the possibilities. Does nothing if searchOtherDirectiories is disabled.",
           "default": true
+        },
+        "file-rs.commonPathSearchTiebreakerFewestSegments": {
+          "type": "boolean",
+          "description": "If commonPathSearch is enabled and there's still a tiebreaker, choose the candidate with fewest path segments, if there's only one such candidate.",
+          "default": true
         }
       }
     }
