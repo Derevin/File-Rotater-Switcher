@@ -57,31 +57,26 @@ async function getCorresponding(allowedExtension : Array<string>, currentFileInf
 
 	if (Config.getCommonPathSearch()){ // Allowed to estimate corresponding file based on common dir in path
 		const commonLengths = foundFiles.map((fileUri) => {
-			function longestCommonPrefix(str1: string, str2: string): number {
-				// skip possible extra slashes
-				while (str1.startsWith('\\') || str1.startsWith('/')){
-					str1 = str1.substring(1);
-				}
-				while (str2.startsWith('\\') || str2.startsWith('/')){
-					str2 = str2.substring(1);
-				}
-
-				// Find the length of the shorter string
-				const minLength = Math.min(str1.length, str2.length);
+			function splitPathSegments(dir: string): string[] {
+				return dir.split(/[\\\/]+/).filter(segment => segment.length > 0);
+			}
 			
-				let commonPrefix = '';
-				// Iterate character by character
-				for (let i = 0; i < minLength; i++) {
-					if (str1[i] !== str2[i]) {
+			function commonPathSegmentCount(dir1: string, dir2: string): number {
+				const parts1 = splitPathSegments(dir1);
+				const parts2 = splitPathSegments(dir2);
+			
+				let count = 0;
+				for (let i = 0; i < Math.min(parts1.length, parts2.length); i++) {
+					if (parts1[i] === parts2[i]) {
+						count++;
+					} else {
 						break;
 					}
-					commonPrefix += str1[i];
 				}
-			
-				return commonPrefix.length;
+				return count;
 			}
 			const fileInfo = path.parse(path.normalize(fileUri.path.substring(1)));
-			return longestCommonPrefix(fileInfo.dir, currentFileInfo.dir);
+			return commonPathSegmentCount(fileInfo.dir, currentFileInfo.dir);
 		});
 	
 		function getIndicesOfHighestNumber(arr: number[]): number[] {
