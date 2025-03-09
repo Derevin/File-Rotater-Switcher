@@ -52,7 +52,7 @@
       "properties": {
         "file-rs.extensionRotations": {
           "type": "array",
-          "markdownDescription": "Array of rotations. Rotations contain steps. When rotating, next (or previous) step is chosen based on current file extension. A step is either a string (`'.cpp'`) or an array of strings (`['.c','.cpp']`).",
+          "markdownDescription": "Array of rotations. Rotations contain steps. When rotating, next (or previous) step is chosen based on current file name suffix. A step is either a string (`'.cpp'`) or an array of strings (`['.c','.cpp']`).",
           "default": [
             [
               [
@@ -66,6 +66,20 @@
                 ".cc",
                 ".cpp",
                 ".cxx"
+              ]
+            ],
+            [
+              [
+                ".h.j2",
+                ".hh.j2",
+                ".hpp.j2",
+                ".hxx.j2"
+              ],
+              [
+                ".c.j2",
+                ".cc.j2",
+                ".cpp.j2",
+                ".cxx.j2"
               ]
             ],
             [

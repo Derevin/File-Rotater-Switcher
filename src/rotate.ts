@@ -17,15 +17,14 @@ function isDirectoryBlacklisted(fPath : string) : boolean {
 	});
 }
 
-async function getCorresponding(allowedExtension : Array<string>, currentFileInfo : path.ParsedPath) : Promise<(string|undefined)>{
+async function getCorresponding(allowedExtension : Array<string>, 	baseName: string, currentFileInfo : path.ParsedPath) : Promise<(string|undefined)>{
 	if (!isDirectoryBlacklisted(currentFileInfo.dir)){
 		const curDirFiles = await fs.promises.readdir(currentFileInfo.dir);
 		const result = curDirFiles.find((file) => {
 			if (isFilePathBlacklisted(path.join(currentFileInfo.dir, file))){
 				return false;
 			}
-			const fileInfo = path.parse(file);
-			return fileInfo.name === currentFileInfo.name && allowedExtension.includes(fileInfo.ext);
+			return allowedExtension.some(suffix => file === baseName + suffix);
 		});
 
 		if (result){
@@ -38,11 +37,14 @@ async function getCorresponding(allowedExtension : Array<string>, currentFileInf
 	}
 
 	const joinedAllowedExtensions = allowedExtension.join(',');
-	const foundFiles = await vscode.workspace.findFiles(`**/${currentFileInfo.name}{${joinedAllowedExtensions}}`, undefined, undefined, undefined)
+	const foundFiles = await vscode.workspace.findFiles(`**/${baseName}{${joinedAllowedExtensions}}`, undefined, undefined, undefined)
 						.then((foundFiles) => { 
 							return foundFiles.filter((fileUri) => {
 								const fileInfo = path.parse(path.normalize(fileUri.path.substring(1)));
-								return !isDirectoryBlacklisted(fileInfo.dir) && !isFilePathBlacklisted(path.join(fileInfo.dir, fileInfo.base));
+								if (isDirectoryBlacklisted(fileInfo.dir) || isFilePathBlacklisted(path.join(fileInfo.dir, fileInfo.base))) {
+									return false;
+								}
+								return allowedExtension.some(suffix => fileInfo.base === baseName + suffix);
 							}); 
 						}
 	);
@@ -203,8 +205,6 @@ async function getCorresponding(allowedExtension : Array<string>, currentFileInf
 		return pickedFile.description;
 	}
 
-	
-
 	return undefined;
 }
 
@@ -226,7 +226,6 @@ function showInfo(msg : string){
 	}	
 }
 
-
 enum Direction {
 	next, previous
 }
@@ -236,14 +235,22 @@ interface CurrentRotationInfo{
 	stepIdx : number;
 }
 
-async function getCurrentRotationInfo(rotations: Array<Array<(string|Array<string>)>>, currentExt : string) : Promise<(CurrentRotationInfo|undefined)>{
+async function getCurrentRotationInfo(rotations: Array<Array<(string|Array<string>)>>, currentFileName : string) : Promise<(CurrentRotationInfo|undefined)>{
 	for (let rotation of rotations){
 		for(let i in rotation){
 			const index : number = Number(i);
 			const step = rotation[index];
-			if ((typeof(step) === 'string' && step === currentExt) || (Array.isArray(step) && step.includes(currentExt))){
-				return {rotation: rotation, stepIdx: index};
-			} 
+			if (typeof(step) === 'string'){
+				// single suffix
+				if (currentFileName.endsWith(step)){
+					return { rotation, stepIdx: index };
+				}
+			} else {
+				// array of suffixes
+				if (step.some(sfx => currentFileName.endsWith(sfx))){
+					return { rotation, stepIdx: index };
+				}
+			}
 		}
 	}	
 
@@ -273,10 +280,7 @@ async function rotate(dir : Direction) {
     }
 	const currentFile : string = vscode.window.activeTextEditor.document.fileName;
     const currentFileInfo = path.parse(currentFile);
-	if (!currentFileInfo.ext){
-		showError("File has no extension");
-		return;
-	}
+	const currentFileName = path.basename(currentFile);
 
 	const rotations = Config.getExtensionRotations();
 	if (!rotations){
@@ -284,16 +288,30 @@ async function rotate(dir : Direction) {
 		return;
 	}
 
-	const currentRotationInfo = await getCurrentRotationInfo(rotations, currentFileInfo.ext);
+	const currentRotationInfo = await getCurrentRotationInfo(rotations, currentFileName);
 	if (!currentRotationInfo){
-		showError(`Undefined rotation for ${currentFileInfo.ext}`);
+		showError(`Undefined rotation for ${currentFileName}`);
 		return;
 	}
 
+	// Figure out which exact suffix matched on the current file (in case it's an array of suffixes)
+	const matchedStep = currentRotationInfo.rotation[currentRotationInfo.stepIdx];
+	const possibleSuffixes = (typeof matchedStep === 'string') ? [matchedStep] : matchedStep;
+	const usedSuffix = possibleSuffixes.find(sf => currentFileName.endsWith(sf));
+	if (!usedSuffix){
+		showError(`Unable to detect which suffix matched for ${currentFileName}`);
+		return;
+	}
+
+	// The part BEFORE the matched suffix
+	const baseName = currentFileName.slice(0, -usedSuffix.length);
+
+	// Try each subsequent rotation step until we find a matching file
 	for(let i = 1; i < currentRotationInfo.rotation.length; ++i){
 		const desiredStep : (string|Array<string>) = await getDesiredRotationStep(currentRotationInfo, dir, i);		
 		const desiredExtensions : Array<string> = typeof(desiredStep) === 'string' ? [desiredStep] : desiredStep;
-		const correspondingFilePath : (string|undefined) = await getCorresponding(desiredExtensions, currentFileInfo);
+
+		const correspondingFilePath : (string|undefined) = await getCorresponding(desiredExtensions, baseName, currentFileInfo);
 		if (!correspondingFilePath){
 			if (Config.getAllowStepPassing()){
 				continue;
