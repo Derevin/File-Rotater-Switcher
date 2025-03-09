@@ -2,7 +2,7 @@
   "name": "file-rs",
   "displayName": "File Rotater/Switcher",
   "description": "Extension for quick rotating (switching) between affiliated files",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "publisher": "Derevin",
   "bugs": {
     "uri": "https://github.com/Derevin/File-Rotater-Switcher/issues"
