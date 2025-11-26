@@ -1,5 +1,9 @@
 # Change Log
 
+## 1.2.1
+
+- Bugfixes
+
 ## 1.2.0
 
 - Rotations now work on suffixes rather than file extensions, allowing greater customisability.

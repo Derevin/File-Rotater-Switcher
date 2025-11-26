@@ -2,7 +2,7 @@
   "name": "file-rs",
   "displayName": "File Rotater/Switcher",
   "description": "Extension for quick rotating (switching) between affiliated files",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "publisher": "Derevin",
   "bugs": {
     "uri": "https://github.com/Derevin/File-Rotater-Switcher/issues"
@@ -13,7 +13,7 @@
     "type": "github"
   },
   "license": "MIT",
-	"icon": "static/file-rotater-icon.png",
+  "icon": "static/file-rotater-icon.png",
   "engines": {
     "vscode": "^1.74.0"
   },
@@ -40,7 +40,7 @@
       {
         "command": "file-rs.rotateNext",
         "key": "f4"
-      },      
+      },
       {
         "command": "file-rs.rotatePrevious",
         "key": "shift+f4"
@@ -150,16 +150,16 @@
     "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
-    "@types/vscode": "^1.74.0",
     "@types/glob": "^8.0.0",
     "@types/mocha": "^10.0.1",
     "@types/node": "16.x",
+    "@types/vscode": "^1.74.0",
     "@typescript-eslint/eslint-plugin": "^5.45.0",
     "@typescript-eslint/parser": "^5.45.0",
+    "@vscode/test-electron": "^2.5.2",
     "eslint": "^8.28.0",
     "glob": "^8.0.3",
     "mocha": "^10.1.0",
-    "typescript": "^4.9.3",
-    "@vscode/test-electron": "^2.2.0"
+    "typescript": "^4.9.3"
   }
 }

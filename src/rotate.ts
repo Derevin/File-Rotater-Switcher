@@ -3,335 +3,347 @@ import * as path from "path";
 import * as fs from 'fs';
 import { Config } from './config';
 
+function normalizePath(p: string): string {
+    let normalized = path.normalize(p);
+    // Lowercase drive letter on Windows
+    if (process.platform === 'win32' && /^[a-zA-Z]:/.test(normalized)) {
+        normalized = normalized.charAt(0).toLowerCase() + normalized.slice(1);
+    }
+    return normalized;
+}
+
 function isFilePathBlacklisted(fPath : string) : boolean {
-	return Config.getBlacklistedFilePaths().some((bFilePath) => {
-		return path.normalize(fPath) === path.normalize(bFilePath); 
-	});
+    const normPath = normalizePath(fPath);
+    return Config.getBlacklistedFilePaths().some((bFilePath) => {
+        return normPath === normalizePath(bFilePath); 
+    });
 }
 
 function isDirectoryBlacklisted(fPath : string) : boolean {
-	const fPathInfo = path.parse(path.normalize(fPath));
-	const dirPath = fPathInfo.ext ? fPathInfo.dir : path.join(fPathInfo.dir, fPathInfo.base);
-	return Config.getBlacklistedDirectories().some((directory) => { 
-		return dirPath.includes(path.normalize(directory)); 
-	});
+    const normPath = normalizePath(fPath);
+    return Config.getBlacklistedDirectories().some((directory) => { 
+        const normBlacklist = normalizePath(directory);
+
+        // Exact match of directory
+        if (normPath === normBlacklist) {return true; };
+
+        // Check for directory in the middle of path: /some/path/build/foo -> includes \build\
+        if (normPath.includes(path.sep + normBlacklist + path.sep)) {return true; };
+
+        // Check for directory at end of path: /some/path/build -> ends with \build
+        if (normPath.endsWith(path.sep + normBlacklist)) {return true; };
+
+        // Check for directory at start of path: build/foo -> starts with build\
+        if (normPath.startsWith(normBlacklist + path.sep)) {return true; };
+
+        return false;
+    });
 }
 
-async function getCorresponding(allowedExtension : Array<string>, 	baseName: string, currentFileInfo : path.ParsedPath) : Promise<(string|undefined)>{
-	if (!isDirectoryBlacklisted(currentFileInfo.dir)){
-		const curDirFiles = await fs.promises.readdir(currentFileInfo.dir);
-		const result = curDirFiles.find((file) => {
-			if (isFilePathBlacklisted(path.join(currentFileInfo.dir, file))){
-				return false;
-			}
-			return allowedExtension.some(suffix => file === baseName + suffix);
-		});
+async function getCorresponding(allowedExtension : Array<string>, baseName: string, currentFileInfo : path.ParsedPath) : Promise<(string|undefined)>{
+    // 1. Current Directory Search
+    if (!isDirectoryBlacklisted(currentFileInfo.dir)){
+        const curDirFiles = await fs.promises.readdir(currentFileInfo.dir);
+        const result = curDirFiles.find((file) => {
+            if (isFilePathBlacklisted(path.join(currentFileInfo.dir, file))){
+                return false;
+            }
+            return allowedExtension.some(suffix => file === baseName + suffix);
+        });
 
-		if (result){
-			return path.join(currentFileInfo.dir, result);
-		}
-	}
+        if (result){
+            return path.join(currentFileInfo.dir, result);
+        }
+    }
 
-	if (!Config.getSearchOtherDirectiories()) { // nowhere else to search
-		return undefined;
-	}
+    if (!Config.getSearchOtherDirectiories()) { 
+        return undefined;
+    }
 
-	const joinedAllowedExtensions = allowedExtension.join(',');
-	const foundFiles = await vscode.workspace.findFiles(`**/${baseName}{${joinedAllowedExtensions}}`, undefined, undefined, undefined)
-						.then((foundFiles) => { 
-							return foundFiles.filter((fileUri) => {
-								const fileInfo = path.parse(path.normalize(fileUri.path.substring(1)));
-								if (isDirectoryBlacklisted(fileInfo.dir) || isFilePathBlacklisted(path.join(fileInfo.dir, fileInfo.base))) {
-									return false;
-								}
-								return allowedExtension.some(suffix => fileInfo.base === baseName + suffix);
-							}); 
-						}
-	);
+    // 2. Workspace Search
+    const joinedAllowedExtensions = allowedExtension.join(',');
+    const foundFiles = await vscode.workspace.findFiles(`**/${baseName}{${joinedAllowedExtensions}}`, undefined, undefined, undefined)
+        .then((foundFiles) => { 
+            return foundFiles.filter((fileUri) => {
+                const fsPath = normalizePath(fileUri.fsPath);
+                const fileInfo = path.parse(fsPath);
+                
+                // Pass the directory part to isDirectoryBlacklisted
+                if (isDirectoryBlacklisted(fileInfo.dir) || isFilePathBlacklisted(fsPath)) {
+                    return false;
+                }
+                return allowedExtension.some(suffix => fileInfo.base === baseName + suffix);
+            }); 
+        });
 
-	if (foundFiles.length <= 0){ // found nothing
-		return undefined;
-	}
+    if (foundFiles.length <= 0){ 
+        return undefined;
+    }
 
-	if (foundFiles.length === 1){
-		return foundFiles[0].path.substring(1);
-	}
+    if (foundFiles.length === 1){
+        return foundFiles[0].fsPath;
+    }
 
-	if (Config.getCommonPathSearch()){ // Allowed to estimate corresponding file based on common dir in path
-		const commonLengths = foundFiles.map((fileUri) => {
-			function splitPathSegments(dir: string): string[] {
-				return dir.split(/[\\\/]+/).filter(segment => segment.length > 0);
-			}
-			
-			function commonPathSegmentCount(dir1: string, dir2: string): number {
-				const parts1 = splitPathSegments(dir1);
-				const parts2 = splitPathSegments(dir2);
-			
-				let count = 0;
-				for (let i = 0; i < Math.min(parts1.length, parts2.length); i++) {
-					if (parts1[i] === parts2[i]) {
-						count++;
-					} else {
-						break;
-					}
-				}
-				return count;
-			}
-			const fileInfo = path.parse(path.normalize(fileUri.path.substring(1)));
-			return commonPathSegmentCount(fileInfo.dir, currentFileInfo.dir);
-		});
-	
-		function getIndicesOfHighestNumber(arr: number[]): number[] {
-			if (arr.length === 0) {
-				return []; // Return empty array for an empty input
-			}
-	
-			let maxNumber = arr[0];
-			let indices = [0];
-	
-			for (let i = 1; i < arr.length; i++) {
-				if (arr[i] > maxNumber) {
-					maxNumber = arr[i];
-					indices = [i];
-				} else if (arr[i] === maxNumber) {
-					indices.push(i);
-				}
-			}
-	
-			return indices;
-		}
-	
-		const highestIndices = getIndicesOfHighestNumber(commonLengths);
-	
-		if (highestIndices.length === 1){
-			const highestIdx = highestIndices[0];
-			return foundFiles[highestIdx].path.substring(1);
-		}
-		
-		// Multiple files have the same highest prefix length
-		// Now compute suffix lengths for these files
-		const suffixLengths = highestIndices.map((idx) => {
-			const fileUri = foundFiles[idx];
-			function longestCommonSuffix(str1: string, str2: string): number {
-				// skip possible extra slashes at the end
-				while (str1.endsWith('\\') || str1.endsWith('/')){
-					str1 = str1.slice(0, -1);
-				}
-				while (str2.endsWith('\\') || str2.endsWith('/')){
-					str2 = str2.slice(0, -1);
-				}
+    // 3. Heuristics
+    if (Config.getCommonPathSearch()){ 
+        const commonLengths = foundFiles.map((fileUri) => {
+            function splitPathSegments(dir: string): string[] {
+                return dir.split(/[\\\/]+/).filter(segment => segment.length > 0);
+            }
+            
+            function commonPathSegmentCount(dir1: string, dir2: string): number {
+                const parts1 = splitPathSegments(normalizePath(dir1));
+                const parts2 = splitPathSegments(normalizePath(dir2));
+            
+                let count = 0;
+                for (let i = 0; i < Math.min(parts1.length, parts2.length); i++) {
+                    if (parts1[i].toLowerCase() === parts2[i].toLowerCase()) {
+                        count++;
+                    } else {
+                        break;
+                    }
+                }
+                return count;
+            }
+            const fileInfo = path.parse(fileUri.fsPath);
+            return commonPathSegmentCount(fileInfo.dir, currentFileInfo.dir);
+        });
+    
+        function getIndicesOfHighestNumber(arr: number[]): number[] {
+            if (arr.length === 0) {return []; };
+            let maxNumber = arr[0];
+            let indices = [0];
+            for (let i = 1; i < arr.length; i++) {
+                if (arr[i] > maxNumber) {
+                    maxNumber = arr[i];
+                    indices = [i];
+                } else if (arr[i] === maxNumber) {
+                    indices.push(i);
+                }
+            }
+            return indices;
+        }
+    
+        const highestIndices = getIndicesOfHighestNumber(commonLengths);
+    
+        if (highestIndices.length === 1){
+            return foundFiles[highestIndices[0]].fsPath;
+        }
+        
+        // Tie-breaker 1: Suffix Length
+        const suffixLengths = highestIndices.map((idx) => {
+            const fileUri = foundFiles[idx];
+            function longestCommonSuffix(str1: string, str2: string): number {
+                str1 = normalizePath(str1);
+                str2 = normalizePath(str2);
+                while (str1.endsWith(path.sep)) {str1 = str1.slice(0, -1); };
+                while (str2.endsWith(path.sep)) {str2 = str2.slice(0, -1); };
+                const minLength = Math.min(str1.length, str2.length);
+                let commonSuffix = '';
+                for (let i = 1; i <= minLength; i++) {
+                    if (str1[str1.length - i].toLowerCase() !== str2[str2.length - i].toLowerCase()) {
+                        break;
+                    }
+                    commonSuffix = str1[str1.length - i] + commonSuffix;
+                }
+                return commonSuffix.length;
+            }
+            const fileInfo = path.parse(fileUri.fsPath);
+            return longestCommonSuffix(fileInfo.dir, currentFileInfo.dir);
+        });
 
-				// Find the length of the shorter string
-				const minLength = Math.min(str1.length, str2.length);
-			
-				let commonSuffix = '';
-				// Iterate character by character from the end
-				for (let i = 1; i <= minLength; i++) {
-					if (str1[str1.length - i] !== str2[str2.length - i]) {
-						break;
-					}
-					commonSuffix = str1[str1.length - i] + commonSuffix;
-				}
-			
-				return commonSuffix.length;
-			}
-			const fileInfo = path.parse(path.normalize(fileUri.path.substring(1)));
-			return longestCommonSuffix(fileInfo.dir, currentFileInfo.dir);
-		});
+        function getIndexOfUniqueHighestNumber(arr: number[]): number | null {
+            if (arr.length === 0) {return null; };
+            let maxIndex = 0;
+            let maxNumber = arr[0];
+            let isUnique = true;
+            for (let i = 1; i < arr.length; i++) {
+                if (arr[i] > maxNumber) {
+                    maxNumber = arr[i];
+                    maxIndex = i;
+                    isUnique = true;
+                } else if (arr[i] === maxNumber) {
+                    isUnique = false;
+                }
+            }
+            return isUnique ? maxIndex : null;
+        }
 
-		// Function to get index of unique highest number
-		function getIndexOfUniqueHighestNumber(arr: number[]): number | null {
-			if (arr.length === 0) {
-				return null; // Return null for an empty array
-			}
-		
-			let maxIndex = 0;
-			let maxNumber = arr[0];
-			let isUnique = true;
-		
-			for (let i = 1; i < arr.length; i++) {
-				if (arr[i] > maxNumber) {
-					maxNumber = arr[i];
-					maxIndex = i;
-					isUnique = true; // Reset the uniqueness flag
-				} else if (arr[i] === maxNumber) {
-					isUnique = false; // Found a duplicate of the max number
-				}
-			}
-		
-			return isUnique ? maxIndex : null;
-		}
+        const indexOfMaxSuffixLength = getIndexOfUniqueHighestNumber(suffixLengths);
+        if (indexOfMaxSuffixLength !== null) {
+            const highestSuffixIdx = highestIndices[indexOfMaxSuffixLength];
+            return foundFiles[highestSuffixIdx].fsPath;
+        }
 
-		// Now find the index of the unique highest suffix length among these files
-		const indexOfMaxSuffixLength = getIndexOfUniqueHighestNumber(suffixLengths);
-		if (indexOfMaxSuffixLength !== null) {
-			const highestSuffixIdx = highestIndices[indexOfMaxSuffixLength];
-			return foundFiles[highestSuffixIdx].path.substring(1);
-		}
+        // Tie-breaker 2: Fewest Segments
+        if (Config.getCommonPathSearchTiebreakerFewestSegments()){
+            let finalCandidates: { idx: number; segmentCount: number }[] = [];
+            for (let idx of highestIndices) {
+                const fileUri = foundFiles[idx];
+                const fileInfo = path.parse(fileUri.fsPath);
+                const dirSegments = fileInfo.dir.split(/[\\/]+/).filter(s => s.length > 0).length;
+                finalCandidates.push({ idx, segmentCount: dirSegments });
+            }
+        
+            const minSegments = Math.min(...finalCandidates.map(c => c.segmentCount));
+            const filtered = finalCandidates.filter(c => c.segmentCount === minSegments);
+        
+            if (filtered.length === 1) {
+                return foundFiles[filtered[0].idx].fsPath;
+            }
+        }
+    }
 
-		if (Config.getCommonPathSearchTiebreakerFewestSegments()){
-			// In case of a tiebreaker, pick the diretory with the fewest path segments
-			let finalCandidates: { idx: number; segmentCount: number }[] = [];
-			for (let idx of highestIndices) {
-				const fileUri = foundFiles[idx];
-				const fileInfo = path.parse(path.normalize(fileUri.path.substring(1)));
-				const dirSegments = fileInfo.dir.split(/[\\/]+/).filter(s => s.length > 0).length;
-				finalCandidates.push({ idx, segmentCount: dirSegments });
-			}
-		
-			const minSegments = Math.min(...finalCandidates.map(c => c.segmentCount));
-			const filtered = finalCandidates.filter(c => c.segmentCount === minSegments);
-		
-			if (filtered.length === 1) {
-				// Exactly one directory has the fewest segments
-				const chosen = filtered[0].idx;
-				return foundFiles[chosen].path.substring(1);
-			}
-		}
-	}
+    const options = foundFiles.map((item) => {
+        return {
+            label: path.basename(item.fsPath),
+            description: normalizePath(item.fsPath)
+        };
+    });
 
-	const options = foundFiles.map((item) => {
-		return {
-			label: path.basename(item.path),
-			description: path.normalize(item.path.substring(1)) // Uri path variable has a leading '/' that we need to remove
-		};
-	});
+    const pickedFile = await vscode.window.showQuickPick(options, {
+        placeHolder: "Choose file to rotate to"
+    });
 
-	const pickedFile = await vscode.window.showQuickPick(options, {
-		placeHolder: "Choose file to rotate to"
-	});
+    if (pickedFile){
+        return pickedFile.description;
+    }
 
-	if (pickedFile){
-		return pickedFile.description;
-	}
-
-	return undefined;
+    return undefined;
 }
 
 function showError(msg : string){
-	if (Config.getShowMessages()){
-		vscode.window.showErrorMessage(msg);
-	}	
+    if (Config.getShowMessages()){
+        vscode.window.showErrorMessage(msg);
+    }
 }
-
 function showWarning(msg : string){
-	if (Config.getShowMessages()){
-		vscode.window.showWarningMessage(msg);
-	}	
+    if (Config.getShowMessages()){
+        vscode.window.showWarningMessage(msg);
+    }
 }
-
 function showInfo(msg : string){
-	if (Config.getShowMessages()){
-		vscode.window.showInformationMessage(msg);
-	}	
+    if (Config.getShowMessages()){
+        vscode.window.showInformationMessage(msg);
+    }
 }
 
 enum Direction {
-	next, previous
+    next, previous
 }
 
 interface CurrentRotationInfo{
-	rotation : Array<(string|Array<string>)>;
-	stepIdx : number;
+    rotation : Array<(string|Array<string>)>;
+    stepIdx : number;
 }
 
 async function getCurrentRotationInfo(rotations: Array<Array<(string|Array<string>)>>, currentFileName : string) : Promise<(CurrentRotationInfo|undefined)>{
-	for (let rotation of rotations){
-		for(let i in rotation){
-			const index : number = Number(i);
-			const step = rotation[index];
-			if (typeof(step) === 'string'){
-				// single suffix
-				if (currentFileName.endsWith(step)){
-					return { rotation, stepIdx: index };
-				}
-			} else {
-				// array of suffixes
-				if (step.some(sfx => currentFileName.endsWith(sfx))){
-					return { rotation, stepIdx: index };
-				}
-			}
-		}
-	}	
+    let bestMatch: CurrentRotationInfo | undefined = undefined;
+    let maxSuffixLength = -1;
 
-	return undefined;
+    for (let rotation of rotations){
+        for(let i in rotation){
+            const index : number = Number(i);
+            const step = rotation[index];
+            
+            let matchedSuffix: string | undefined = undefined;
+            if (typeof(step) === 'string'){
+                if (currentFileName.endsWith(step)){
+                    matchedSuffix = step;
+                }
+            } else {
+                matchedSuffix = step.find(sfx => currentFileName.endsWith(sfx));
+            }
+
+            if (matchedSuffix) {
+                if (matchedSuffix.length > maxSuffixLength) {
+                    maxSuffixLength = matchedSuffix.length;
+                    bestMatch = { rotation, stepIdx: index };
+                }
+            }
+        }
+    }   
+    return bestMatch;
 }
 
+// Fixed: Previous direction math
 async function getDesiredRotationStep(currentRotationInfo: CurrentRotationInfo, dir : Direction, offset: number) : Promise<(string|Array<string>)>{
-	const {rotation, stepIdx} = currentRotationInfo;
-	if (dir === Direction.next){
-		if (stepIdx + offset >= rotation.length){ // last index
-			return rotation[stepIdx + offset - rotation.length];
-		} else {
-			return rotation[stepIdx + offset];
-		}
-	} else { // previous
-		if (stepIdx - offset <= 0){
-			return rotation[rotation.length - stepIdx - offset];
-		} else {
-			return rotation[stepIdx - offset];
-		}
-	}
+    const {rotation, stepIdx} = currentRotationInfo;
+    const len = rotation.length;
+    
+    if (dir === Direction.next){
+        return rotation[(stepIdx + offset) % len];
+    } else { 
+        let target = (stepIdx - offset) % len;
+        if (target < 0) {target += len; };
+        return rotation[target];
+    }
 }
 
 async function rotate(dir : Direction) {
-	if (!vscode.window.activeTextEditor) {
+    if (!vscode.window.activeTextEditor) {
         return;
     }
-	const currentFile : string = vscode.window.activeTextEditor.document.fileName;
+    const currentFile : string = vscode.window.activeTextEditor.document.fileName;
     const currentFileInfo = path.parse(currentFile);
-	const currentFileName = path.basename(currentFile);
+    const currentFileName = path.basename(currentFile);
 
-	const rotations = Config.getExtensionRotations();
-	if (!rotations){
-		showError("Rotations are empty");
-		return;
-	}
+    const rotations = Config.getExtensionRotations();
+    if (!rotations){
+        showError("Rotations are empty");
+        return;
+    }
 
-	const currentRotationInfo = await getCurrentRotationInfo(rotations, currentFileName);
-	if (!currentRotationInfo){
-		showError(`Undefined rotation for ${currentFileName}`);
-		return;
-	}
+    const currentRotationInfo = await getCurrentRotationInfo(rotations, currentFileName);
+    if (!currentRotationInfo){
+        showError(`Undefined rotation for ${currentFileName}`);
+        return;
+    }
 
-	// Figure out which exact suffix matched on the current file (in case it's an array of suffixes)
-	const matchedStep = currentRotationInfo.rotation[currentRotationInfo.stepIdx];
-	const possibleSuffixes = (typeof matchedStep === 'string') ? [matchedStep] : matchedStep;
-	const usedSuffix = possibleSuffixes.find(sf => currentFileName.endsWith(sf));
-	if (!usedSuffix){
-		showError(`Unable to detect which suffix matched for ${currentFileName}`);
-		return;
-	}
+    const matchedStep = currentRotationInfo.rotation[currentRotationInfo.stepIdx];
+    const possibleSuffixes = (typeof matchedStep === 'string') ? [matchedStep] : matchedStep;
+    
+    let usedSuffix = '';
+    for (const sf of possibleSuffixes) {
+        if (currentFileName.endsWith(sf)) {
+             if (sf.length > usedSuffix.length) {
+                 usedSuffix = sf;
+             }
+        }
+    }
+    
+    if (!usedSuffix){
+        showError(`Unable to detect which suffix matched for ${currentFileName}`);
+        return;
+    }
 
-	// The part BEFORE the matched suffix
-	const baseName = currentFileName.slice(0, -usedSuffix.length);
+    const baseName = currentFileName.slice(0, -usedSuffix.length);
 
-	// Try each subsequent rotation step until we find a matching file
-	for(let i = 1; i < currentRotationInfo.rotation.length; ++i){
-		const desiredStep : (string|Array<string>) = await getDesiredRotationStep(currentRotationInfo, dir, i);		
-		const desiredExtensions : Array<string> = typeof(desiredStep) === 'string' ? [desiredStep] : desiredStep;
+    for(let i = 1; i < currentRotationInfo.rotation.length; ++i){
+        const desiredStep : (string|Array<string>) = await getDesiredRotationStep(currentRotationInfo, dir, i);
+        const desiredExtensions : Array<string> = typeof(desiredStep) === 'string' ? [desiredStep] : desiredStep;
 
-		const correspondingFilePath : (string|undefined) = await getCorresponding(desiredExtensions, baseName, currentFileInfo);
-		if (!correspondingFilePath){
-			if (Config.getAllowStepPassing()){
-				continue;
-			} else {
-				break;
-			}
-		}
-	
-		const uri = vscode.Uri.file(correspondingFilePath);
-		const document = await vscode.workspace.openTextDocument(uri);
-		await vscode.window.showTextDocument(document);
-		return;
-	}
-	showWarning("No file to rotate to");
+        const correspondingFilePath : (string|undefined) = await getCorresponding(desiredExtensions, baseName, currentFileInfo);
+        if (!correspondingFilePath){
+            if (Config.getAllowStepPassing()){
+                continue;
+            } else {
+                break;
+            }
+        }
+    
+        const uri = vscode.Uri.file(correspondingFilePath);
+        const document = await vscode.workspace.openTextDocument(uri);
+        await vscode.window.showTextDocument(document);
+        return;
+    }
+    showWarning("No file to rotate to");
 }
 
 export async function rotateNext(){
-	rotate(Direction.next);
+    rotate(Direction.next);
 }
 
 export async function rotatePrevious(){
-	rotate(Direction.previous);
+    rotate(Direction.previous);
 }
